@@ -167,180 +167,54 @@ class TextProcessor:
                 
             i += 1
         
-        # Continue with original processing logic
-        # [Keep existing post-processing code...]
-        
-        return segments
-    
-    def _post_process_segments(self, segments, max_chars=42):
-    """
-    Enhanced post-processing to ensure no line exceeds the maximum character limit.
-    """
-    processed_segments = []
-    
-    for segment in segments:
-        # Check if segment contains a newline
-        if '\n' in segment:
-            lines = segment.split('\n')
-            
-            # Process each line to ensure it doesn't exceed max_chars
-            for i in range(len(lines)):
-                if len(lines[i]) > max_chars:
-                    # Split this line into words and rebuild it to fit max_chars
-                    words = lines[i].split()
-                    new_line = ""
-                    for word in words:
-                        if len(new_line) + len(word) + (1 if new_line else 0) <= max_chars:
-                            new_line += " " + word if new_line else word
-                        else:
-                            break
-                    lines[i] = new_line
-            
-            # Reconstruct the segment with fixed lines
-            if len(lines) > 1:
-                processed_segments.append(lines[0] + "\n" + lines[1])
-            else:
-                processed_segments.append(lines[0])
-        else:
-            # No newline, check if length exceeds max_chars
-            if len(segment) > max_chars:
-                # Split into two lines
-                words = segment.split()
-                line1 = ""
-                line2 = ""
-                
-                for word in words:
-                    if len(line1) + len(word) + (1 if line1 else 0) <= max_chars:
-                        line1 += " " + word if line1 else word
-                    elif len(line2) + len(word) + (1 if line2 else 0) <= max_chars:
-                        line2 += " " + word if line2 else word
-                    else:
-                        break  # Can't fit more words
-                
-                if line2:
-                    processed_segments.append(line1 + "\n" + line2)
-                else:
-                    processed_segments.append(line1)
-            else:
-                processed_segments.append(segment)
-    
-    # Original post-processing code follows...
-    # [Keep your existing post-processing logic here]
-    
-    return processed_segments
-    
-    def _post_process_segments(self, segments, max_chars=42):
-        """
-        Enhanced post-processing to combine segments more intelligently.
-        - Combines very short segments (1-3 words)
-        - Avoids splitting sentences across subtitles when possible
-        - Ensures no subtitle is too short or too long
-        - Ensures periods stay with preceding text
-        - Limits to maximum 2 lines per subtitle
-        - Never leaves speaker tags or 1-2 word segments alone
-        """
-        # First pass - aggressively combine speaker-only or very short segments
-        i = 0
-        while i < len(segments) - 1:
-            current = segments[i]
-            next_segment = segments[i + 1]
-            
-            # If current segment is just a speaker tag, always combine with next
-            if current.endswith(':') and len(current.split()) <= 2:
-                segments[i] = current + " " + next_segment
-                segments.pop(i + 1)
-                continue
-                
-            # If next segment is very short (1-2 words or ending with period)
-            next_word_count = len(next_segment.split())
-            if next_word_count <= 2 or (next_segment.strip().endswith('.') and next_word_count <= 4):
-                # Always try to combine very short segments
-                if "\n" in current:
-                    # Current already has a line break
-                    lines = current.split('\n')
-                    if len(lines[1]) + len(next_segment) + 1 <= max_chars:
-                        # Can fit next segment in second line
-                        segments[i] = lines[0] + "\n" + lines[1] + " " + next_segment
-                    else:
-                        # Create a balanced 2-line segment
-                        combined = current.replace('\n', ' ') + " " + next_segment
-                        words = combined.split()
-                        
-                        # Find balanced break point
-                        total_chars = len(combined)
-                        best_break = len(words) // 2
-                        
-                        for j in range(1, len(words)):
-                            first_part = " ".join(words[:j])
-                            second_part = " ".join(words[j:])
-                            
-                            if len(first_part) <= max_chars and len(second_part) <= max_chars:
-                                if abs(len(first_part) - len(second_part)) < abs(len(" ".join(words[:best_break])) - len(" ".join(words[best_break:]))):
-                                    best_break = j
-                    
-                        segments[i] = " ".join(words[:best_break]) + "\n" + " ".join(words[best_break:])
-                elif len(current) + len(next_segment) + 1 <= max_chars:
-                    # Can fit on one line
-                    segments[i] = current + " " + next_segment
-                else:
-                    # Create a 2-line segment
-                    segments[i] = current + "\n" + next_segment
-                    
-                # Remove the next segment since we combined it
-                segments.pop(i + 1)
-                continue
-                
-            i += 1
-        
-        # Continue with standard processing
+        # Fourth pass - ensure no lines are too long
         processed_segments = []
-        i = 0
         
-        while i < len(segments):
-            current_segment = segments[i]
-            
-            # First, ensure no segment has more than 2 lines
-            if current_segment.count('\n') > 1:
-                lines = current_segment.split('\n')
-                current_segment = lines[0] + '\n' + lines[1]
-                # Add remaining lines as separate segments
-                for j in range(2, len(lines)):
-                    if lines[j].strip():
-                        segments.insert(i+1, lines[j])
-        
-            # Check if we can combine with next segment
-            if i + 1 < len(segments):
-                next_segment = segments[i + 1]
-                next_word_count = len(next_segment.split())
-                next_char_count = len(next_segment)
+        for segment in segments:
+            # Check if segment contains a newline
+            if '\n' in segment:
+                lines = segment.split('\n')
                 
-                # Check for period at end of current segment
-                ends_with_period = re.search(r'\.\s*$', current_segment)
+                # Process each line to ensure it doesn't exceed max_chars
+                for i in range(len(lines)):
+                    if len(lines[i]) > max_chars:
+                        # Split this line into words and rebuild it to fit max_chars
+                        words = lines[i].split()
+                        new_line = ""
+                        for word in words:
+                            if len(new_line) + len(word) + (1 if new_line else 0) <= max_chars:
+                                new_line += " " + word if new_line else word
+                            else:
+                                break
+                        lines[i] = new_line
                 
-                # More aggressive combination for short segments (up to 5 words or 25 characters)
-                if next_word_count <= 5 or next_char_count <= 25:
-                    # If current ends with period, next segment should start a new subtitle
-                    if not ends_with_period:
-                        # Check if we can combine them
-                        combined = self._try_combine_segments(current_segment, next_segment, max_chars)
-                        
-                        if combined:
-                            processed_segments.append(combined)
-                            i += 2  # Skip next segment since we combined it
-                            continue
-            
-                # Check for incomplete sentences (no ending punctuation)
-                if not re.search(r'[.!?;:]$', current_segment.replace('\n', '').strip()):
-                    # Current segment doesn't end with punctuation
-                    combined = self._try_combine_segments(current_segment, next_segment, max_chars, allow_longer=True)
+                # Reconstruct the segment with fixed lines
+                if len(lines) > 1:
+                    processed_segments.append(lines[0] + "\n" + lines[1])
+                else:
+                    processed_segments.append(lines[0])
+            else:
+                # No newline, check if length exceeds max_chars
+                if len(segment) > max_chars:
+                    # Split into two lines
+                    words = segment.split()
+                    line1 = ""
+                    line2 = ""
                     
-                    if combined:
-                        processed_segments.append(combined)
-                        i += 2  # Skip next segment
-                        continue
-        
-            processed_segments.append(current_segment)
-            i += 1
+                    for word in words:
+                        if len(line1) + len(word) + (1 if line1 else 0) <= max_chars:
+                            line1 += " " + word if line1 else word
+                        elif len(line2) + len(word) + (1 if line2 else 0) <= max_chars:
+                            line2 += " " + word if line2 else word
+                        else:
+                            break  # Can't fit more words
+                    
+                    if line2:
+                        processed_segments.append(line1 + "\n" + line2)
+                    else:
+                        processed_segments.append(line1)
+                else:
+                    processed_segments.append(segment)
         
         # Fix period handling and other issues in a final pass
         result = []
@@ -574,69 +448,69 @@ class TextProcessor:
         return [f"{first_line}\n{second_line}"]
 
     def _enforce_character_limit(self, segments, max_chars=42):
-    """
-    Final pass to strictly enforce the character limit per line, even if it means 
-    breaking sentences in less ideal places.
-    """
-    enforced_segments = []
-    
-    for segment in segments:
-        if '\n' in segment:
-            lines = segment.split('\n')
+        """
+        Final pass to strictly enforce the character limit per line, even if it means 
+        breaking sentences in less ideal places.
+        """
+        enforced_segments = []
+        
+        for segment in segments:
+            if '\n' in segment:
+                lines = segment.split('\n')
+                
+                # Process each line independently
+                processed_lines = []
+                for line in lines:
+                    if len(line) <= max_chars:
+                        processed_lines.append(line)
+                    else:
+                        # Line is too long, need to split it
+                        words = line.split()
+                        current = ""
+                        
+                        for word in words:
+                            if len(current) + len(word) + (1 if current else 0) <= max_chars:
+                                current += " " + word if current else word
+                            else:
+                                # Current word would exceed max_chars
+                                processed_lines.append(current)
+                                current = word
+                        
+                        if current:
+                            processed_lines.append(current)
+                
+                # Create new segments with max 2 lines per segment
+                for i in range(0, len(processed_lines), 2):
+                    if i + 1 < len(processed_lines):
+                        enforced_segments.append(processed_lines[i] + '\n' + processed_lines[i+1])
+                    else:
+                        enforced_segments.append(processed_lines[i])
             
-            # Process each line independently
-            processed_lines = []
-            for line in lines:
-                if len(line) <= max_chars:
-                    processed_lines.append(line)
+            else:
+                # No line break yet
+                if len(segment) <= max_chars:
+                    enforced_segments.append(segment)
                 else:
-                    # Line is too long, need to split it
-                    words = line.split()
+                    # Need to split this long line
+                    words = segment.split()
+                    lines = []
                     current = ""
                     
                     for word in words:
                         if len(current) + len(word) + (1 if current else 0) <= max_chars:
                             current += " " + word if current else word
                         else:
-                            # Current word would exceed max_chars
-                            processed_lines.append(current)
+                            lines.append(current)
                             current = word
                     
                     if current:
-                        processed_lines.append(current)
-            
-            # Create new segments with max 2 lines per segment
-            for i in range(0, len(processed_lines), 2):
-                if i + 1 < len(processed_lines):
-                    enforced_segments.append(processed_lines[i] + '\n' + processed_lines[i+1])
-                else:
-                    enforced_segments.append(processed_lines[i])
-        
-        else:
-            # No line break yet
-            if len(segment) <= max_chars:
-                enforced_segments.append(segment)
-            else:
-                # Need to split this long line
-                words = segment.split()
-                lines = []
-                current = ""
-                
-                for word in words:
-                    if len(current) + len(word) + (1 if current else 0) <= max_chars:
-                        current += " " + word if current else word
-                    else:
                         lines.append(current)
-                        current = word
-                
-                if current:
-                    lines.append(current)
-                
-                # Create segments with max 2 lines each
-                for i in range(0, len(lines), 2):
-                    if i + 1 < len(lines):
-                        enforced_segments.append(lines[i] + '\n' + lines[i+1])
-                    else:
-                        enforced_segments.append(lines[i])
-    
-    return enforced_segments
+                    
+                    # Create segments with max 2 lines each
+                    for i in range(0, len(lines), 2):
+                        if i + 1 < len(lines):
+                            enforced_segments.append(lines[i] + '\n' + lines[i+1])
+                        else:
+                            enforced_segments.append(lines[i])
+        
+        return enforced_segments
