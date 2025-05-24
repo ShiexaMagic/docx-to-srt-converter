@@ -140,15 +140,19 @@ def transcribe():
         # Save uploaded file
         audio_path = os.path.join(temp_dir, file.filename)
         file.save(audio_path)
-
-        # Convert audio if needed
-        try:
-            audio_path = audio_processor.convert_audio_if_needed(audio_path)
-        except Exception as e:
-            logging.warning(f"Audio conversion skipped: {e}")
-
+        
+        # For MP3 files, explicitly try to convert it (will use ffmpeg if available)
+        if audio_path.lower().endswith('.mp3'):
+            try:
+                converted_path = audio_processor.convert_audio_if_needed(audio_path)
+                if converted_path != audio_path:
+                    audio_path = converted_path
+                    logging.info(f"Successfully converted MP3 to: {audio_path}")
+            except Exception as e:
+                logging.warning(f"Failed to convert MP3 file: {e}")
+        
         # Create output path
-        srt_filename = os.path.splitext(file.filename)[0] + '.srt'
+        srt_filename = os.path.splitext(os.path.basename(audio_path))[0] + '.srt'
         srt_path = os.path.join(temp_dir, srt_filename)
         
         # Process the audio file

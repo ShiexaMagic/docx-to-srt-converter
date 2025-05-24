@@ -98,14 +98,33 @@ class AudioProcessor:
         """Transcribes audio file using Google Speech-to-Text API."""
         if not self.client:
             raise ValueError("Google Speech client not initialized. Check credentials.")
+    
+        # Convert audio if it's an MP3 file
+        file_ext = os.path.splitext(audio_path)[1].lower()
+        if file_ext == '.mp3':
+            logging.info("MP3 file detected, attempting conversion to FLAC")
+            try:
+                audio_path = self.convert_audio_if_needed(audio_path)
+                file_ext = os.path.splitext(audio_path)[1].lower()  # Update extension after conversion
+                logging.info(f"Using converted file: {audio_path}")
+            except Exception as e:
+                logging.warning(f"Audio conversion failed: {e}, will try with original file")
             
         # Read the audio file
         with io.open(audio_path, "rb") as audio_file:
             content = audio_file.read()
     
-        # Use LINEAR16 encoding which is widely supported
-        encoding = speech.RecognitionConfig.AudioEncoding.LINEAR16
-        sample_rate = 16000
+        # Set encoding based on file type
+        if file_ext == '.flac':
+            encoding = speech.RecognitionConfig.AudioEncoding.FLAC
+        elif file_ext == '.ogg':
+            encoding = speech.RecognitionConfig.AudioEncoding.OGG_OPUS
+        else:  # Default for WAV and other formats
+            encoding = speech.RecognitionConfig.AudioEncoding.LINEAR16
+    
+        sample_rate = 16000  # Use a standard sample rate
+    
+        logging.info(f"Using {encoding} encoding for {file_ext} file")
     
         # Configure the request
         audio = speech.RecognitionAudio(content=content)
@@ -120,7 +139,7 @@ class AudioProcessor:
             model="default"
         )
         
-        logging.info(f"Transcribing audio with format: LINEAR16, sample rate: {sample_rate}")
+        logging.info(f"Transcribing audio with format: {encoding}, sample rate: {sample_rate}")
         
         # Make the API call
         operation = self.client.long_running_recognize(config=config, audio=audio)
