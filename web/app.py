@@ -111,6 +111,10 @@ def transcribe():
         flash(f'Only {", ".join(allowed_extensions)} files are supported')
         return redirect(url_for('index'))
     
+    # Add this within your transcribe route, after the file extension check
+    if file.filename.lower().endswith('.mp3') and os.environ.get('VERCEL'):
+        flash('MP3 files may have limited support. For best results, please use WAV or FLAC files.')
+    
     try:
         # Verify the audio processor client is initialized
         if not audio_processor.client:
