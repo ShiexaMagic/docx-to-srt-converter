@@ -25,7 +25,7 @@ except ImportError:
 from src.text_processor import TextProcessor
 from src.timestamp_generator import TimestampGenerator
 from src.converter import Converter
-from src.audio_processor import AudioProcessor
+from src.audio_processor import AudioProcessor, get_google_credentials
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key')
@@ -34,7 +34,12 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key')
 text_processor = TextProcessor()
 timestamp_generator = TimestampGenerator()
 converter = Converter(text_processor, timestamp_generator)
+
+# Initialize audio processor
 audio_processor = AudioProcessor()
+
+# Print diagnostic info for debugging
+logging.info(f"AudioProcessor client initialized: {audio_processor.client is not None}")
 
 @app.route('/')
 def index():
@@ -106,29 +111,30 @@ def transcribe():
         return redirect(url_for('index'))
     
     try:
-        # Check if Google client is initialized
+        # Verify the audio processor client is initialized
         if not audio_processor.client:
-            # Try to initialize again
-            logging.info("Attempting to reinitialize Google Speech client")
-            credentials_path = get_google_credentials()
-            
-            if credentials_path:
-                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
-                audio_processor.client = speech.SpeechClient()
+            logging.error("Speech client not initialized, attempting reinitialize")
+            try:
+                # Try to reinitialize using direct credentials
+                from src.credentials import get_google_credentials_direct
+                credentials = get_google_credentials_direct()
+                if credentials:
+                    audio_processor.client = speech.SpeechClient(credentials=credentials)
+                    logging.info("Successfully reinitialized Google Speech client")
+            except Exception as reinit_error:
+                logging.error(f"Failed to reinitialize client: {reinit_error}")
                 
-            # If still not initialized, show error
+            # Final check if client is available
             if not audio_processor.client:
-                flash('Google Speech API not available. Please check server configuration.')
+                flash('Google Speech API not available. Check server configuration.')
                 return redirect(url_for('index'))
         
-        # Create temp directory that works on Vercel
+        # Create temp directory that's compatible with the environment
         if os.environ.get('VERCEL'):
             temp_dir = '/tmp'
             os.makedirs(temp_dir, exist_ok=True)
         else:
             temp_dir = tempfile.mkdtemp()
-        
-        logging.info(f"Using temp directory: {temp_dir}")
         
         # Save uploaded file
         audio_path = os.path.join(temp_dir, file.filename)
@@ -138,16 +144,13 @@ def transcribe():
         srt_filename = os.path.splitext(file.filename)[0] + '.srt'
         srt_path = os.path.join(temp_dir, srt_filename)
         
-        # Log file details
-        logging.info(f"Processing audio file: {audio_path} ({os.path.getsize(audio_path)} bytes)")
-        
         # Process the audio file
         results = audio_processor.transcribe_file(audio_path)
         
         # Convert to SRT
         audio_processor.convert_to_srt(results, text_processor, srt_path)
         
-        # Return the converted file
+        # Return the SRT file
         return send_file(
             srt_path,
             as_attachment=True,
@@ -156,7 +159,7 @@ def transcribe():
         )
         
     except Exception as e:
-        logging.error(f"Error in transcribe route: {str(e)}")
+        logging.error(f"Error during transcription: {str(e)}")
         logging.error(traceback.format_exc())
         flash(f'Error during transcription: {str(e)}')
         return redirect(url_for('index'))

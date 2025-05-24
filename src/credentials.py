@@ -4,6 +4,9 @@ import logging
 import traceback
 from google.oauth2 import service_account
 
+# Add __all__ to export both functions
+__all__ = ['get_google_credentials_direct', 'get_google_credentials']
+
 def get_google_credentials_direct():
     """Create credentials directly from environment variables"""
     try:
