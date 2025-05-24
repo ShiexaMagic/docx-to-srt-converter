@@ -2,13 +2,35 @@ import os
 from google.cloud import speech
 import io
 import logging
+from your_credentials_module import get_google_credentials, get_google_credentials_direct  # Adjust import as necessary
 
 class AudioProcessor:
-    def __init__(self, credentials_path=None):
+    def __init__(self):
         """Initialize the AudioProcessor with Google Cloud credentials."""
-        if credentials_path:
-            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path
-        self.client = speech.SpeechClient()
+        self.client = None
+        try:
+            # First try to get direct credentials
+            credentials = get_google_credentials_direct()
+            if credentials:
+                logging.info("Using direct credentials")
+                self.client = speech.SpeechClient(credentials=credentials)
+                logging.info("Successfully initialized Google Speech client with direct credentials")
+                return
+                
+            # Fall back to file-based credentials
+            credentials_path = get_google_credentials()
+            if credentials_path:
+                logging.info(f"Using credentials file: {credentials_path}")
+                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
+                self.client = speech.SpeechClient()
+                logging.info("Successfully initialized Google Speech client with file credentials")
+                return
+                
+            logging.error("Failed to obtain Google credentials")
+            
+        except Exception as e:
+            logging.error(f"Error initializing Google Speech client: {str(e)}")
+            logging.error(traceback.format_exc())
     
     def transcribe_file(self, audio_path):
         """Transcribes audio file using Google Speech-to-Text API with Georgian language."""

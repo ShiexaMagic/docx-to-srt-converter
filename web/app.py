@@ -38,11 +38,23 @@ def get_google_credentials():
         if os.environ.get('GOOGLE_PRIVATE_KEY') and os.environ.get('GOOGLE_CLIENT_EMAIL'):
             logging.info("Found Google credentials in environment variables")
             
+            # Get private key and fix formatting issues
+            private_key = os.environ.get('GOOGLE_PRIVATE_KEY')
+            
+            # Ensure proper newlines in the private key
+            if r'\n' in private_key and '\n' not in private_key:
+                private_key = private_key.replace(r'\n', '\n')
+            
+            # Make sure private key has proper format
+            if not private_key.startswith('-----BEGIN PRIVATE KEY-----'):
+                logging.error("Private key does not have correct format")
+                return None
+                
             # Create credentials from environment variables
             credentials_dict = {
                 "type": "service_account",
                 "project_id": os.environ.get('GOOGLE_PROJECT_ID', ''),
-                "private_key": os.environ.get('GOOGLE_PRIVATE_KEY').replace('\\n', '\n'),
+                "private_key": private_key,
                 "client_email": os.environ.get('GOOGLE_CLIENT_EMAIL'),
                 "client_id": os.environ.get('GOOGLE_CLIENT_ID', ''),
                 "auth_uri": "https://accounts.google.com/o/oauth2/auth",
@@ -54,19 +66,28 @@ def get_google_credentials():
             
             # Create temp credentials file for library to use
             try:
-                # On Vercel, use /tmp
-                if os.environ.get('VERCEL'):
-                    credentials_path = '/tmp/google_credentials_temp.json'
-                else:
-                    credentials_path = 'google_credentials_temp.json'
-                    
+                credentials_path = '/tmp/google_credentials_temp.json'
+                
+                # Debug the content being written (masked for security)
+                logging.info(f"Writing credentials file to {credentials_path}")
+                logging.info(f"Project ID: {credentials_dict['project_id']}")
+                logging.info(f"Client email: {credentials_dict['client_email']}")
+                logging.info(f"Private key format looks correct: {private_key.startswith('-----BEGIN PRIVATE KEY-----')}")
+                
                 with open(credentials_path, 'w') as f:
                     json.dump(credentials_dict, f)
                 
-                logging.info(f"Created credentials file at {credentials_path}")
-                return credentials_path
+                # Verify the file was created successfully
+                if os.path.exists(credentials_path):
+                    logging.info(f"Credentials file created successfully: {os.path.getsize(credentials_path)} bytes")
+                    return credentials_path
+                else:
+                    logging.error("Credentials file was not created")
+                    return None
+                    
             except Exception as e:
-                logging.error(f"Error creating credentials file: {e}")
+                logging.error(f"Error creating credentials file: {str(e)}")
+                logging.error(traceback.format_exc())
                 return None
         
         # Check for credentials file
@@ -77,7 +98,8 @@ def get_google_credentials():
         logging.warning("No Google credentials found")
         return None
     except Exception as e:
-        logging.error(f"Error in get_google_credentials: {e}")
+        logging.error(f"Error in get_google_credentials: {str(e)}")
+        logging.error(traceback.format_exc())
         return None
 
 # Set up Google credentials if available
