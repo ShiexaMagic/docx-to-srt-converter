@@ -14,15 +14,45 @@ sys.path.append(os.path.join(root_dir, 'src'))
 from text_processor import TextProcessor
 from timestamp_generator import TimestampGenerator
 from converter import Converter
-from src.audio_processor import AudioProcessor
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key')
 
-# Initialize our converter components
-text_processor = TextProcessor()
-timestamp_generator = TimestampGenerator()
-converter = Converter(text_processor, timestamp_generator)
+# Handle Google Cloud credentials
+def get_google_credentials():
+    """Get Google credentials from environment variables or file"""
+    # Check if running on Vercel with environment variables
+    if os.environ.get('GOOGLE_PRIVATE_KEY') and os.environ.get('GOOGLE_CLIENT_EMAIL'):
+        # Create credentials from environment variables
+        credentials_dict = {
+            "type": "service_account",
+            "project_id": os.environ.get('GOOGLE_PROJECT_ID', ''),
+            "private_key": os.environ.get('GOOGLE_PRIVATE_KEY').replace('\\n', '\n'),
+            "client_email": os.environ.get('GOOGLE_CLIENT_EMAIL'),
+            "client_id": os.environ.get('GOOGLE_CLIENT_ID', ''),
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/{os.environ.get('GOOGLE_CLIENT_EMAIL', '').replace('@', '%40')}",
+            "universe_domain": "googleapis.com"
+        }
+        
+        # Create temp credentials file for library to use
+        with open('/tmp/google_credentials_temp.json', 'w') as f:
+            json.dump(credentials_dict, f)
+        
+        return '/tmp/google_credentials_temp.json'
+    
+    # Check for credentials file
+    elif os.path.exists('google_credentials.json'):
+        return 'google_credentials.json'
+    
+    return None
+
+# Set up Google credentials if available
+credentials_path = get_google_credentials()
+if credentials_path:
+    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
 
 # Audio processing class
 class AudioProcessor:
@@ -122,42 +152,6 @@ class AudioProcessor:
         msecs = int((seconds - int(seconds)) * 1000)
         return f"{hours:02d}:{minutes:02d}:{secs:02d},{msecs:03d}"
 
-# Add this code to handle credentials securely
-def get_google_credentials():
-    """Get Google credentials from environment variables or file"""
-    # Check if running on Vercel with environment variables
-    if os.environ.get('GOOGLE_PRIVATE_KEY') and os.environ.get('GOOGLE_CLIENT_EMAIL'):
-        # Create credentials from environment variables
-        credentials_dict = {
-            "type": "service_account",
-            "project_id": os.environ.get('GOOGLE_PROJECT_ID'),
-            "private_key": os.environ.get('GOOGLE_PRIVATE_KEY').replace('\\n', '\n'),
-            "client_email": os.environ.get('GOOGLE_CLIENT_EMAIL'),
-            "client_id": os.environ.get('GOOGLE_CLIENT_ID', ''),
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-            "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/{os.environ.get('GOOGLE_CLIENT_EMAIL').replace('@', '%40')}",
-            "universe_domain": "googleapis.com"
-        }
-        
-        # Create temp credentials file for library to use
-        with open('google_credentials_temp.json', 'w') as f:
-            json.dump(credentials_dict, f)
-        
-        return 'google_credentials_temp.json'
-    
-    # Check for credentials file
-    elif os.path.exists('google_credentials.json'):
-        return 'google_credentials.json'
-    
-    return None
-
-# Set up Google credentials if available
-credentials_path = get_google_credentials()
-if credentials_path:
-    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
-
 # Initialize our components
 text_processor = TextProcessor()
 timestamp_generator = TimestampGenerator()
@@ -233,11 +227,6 @@ def transcribe():
         flash(f'Only {", ".join(allowed_extensions)} files are supported')
         return redirect(url_for('index'))
     
-    # Check if Google credentials are set up
-    if not os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
-        flash('Google Cloud Speech-to-Text credentials not configured. Please check server setup.')
-        return redirect(url_for('index'))
-    
     try:
         # Create temp directory
         temp_dir = tempfile.mkdtemp()
@@ -268,5 +257,6 @@ def transcribe():
         flash(f'Error during transcription: {str(e)}')
         return redirect(url_for('index'))
 
+# For local development
 if __name__ == '__main__':
     app.run(debug=True)
