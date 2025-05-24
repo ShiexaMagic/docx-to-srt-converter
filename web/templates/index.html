@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DOCX to SRT Converter</title>
+    <title>Document & Audio Conversion</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -22,6 +22,11 @@
         h1 {
             color: #333333;
             text-align: center;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
             margin-bottom: 30px;
         }
         .drop-zone {
@@ -74,11 +79,53 @@
             margin-bottom: 10px;
             border-radius: 4px;
         }
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #ddd;
+        }
+        .tab {
+            padding: 12px 20px;
+            cursor: pointer;
+            background-color: #f1f1f1;
+            border-radius: 5px 5px 0 0;
+            margin-right: 5px;
+            transition: background-color 0.3s;
+        }
+        .tab.active {
+            background-color: #4CAF50;
+            color: white;
+            font-weight: bold;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.5s;
+        }
+        .note {
+            background-color: #fff3cd;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+        .note h3 {
+            margin-top: 0;
+            font-size: 16px;
+            color: #856404;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>DOCX to SRT Subtitle Converter</h1>
+        <h1>SRT Subtitle Creator</h1>
+        <p class="subtitle">Convert documents or transcribe audio to SRT subtitles</p>
         
         {% if get_flashed_messages() %}
         <ul class="flash-messages">
@@ -88,48 +135,122 @@
         </ul>
         {% endif %}
         
-        <form action="/convert" method="post" enctype="multipart/form-data">
-            <div class="drop-zone" id="drop-zone">
-                <p>Drag & Drop DOCX Files Here</p>
-                <p>or</p>
-                <button type="button" class="button" onclick="document.getElementById('file-input').click()">Browse Files</button>
-                <input type="file" name="docx_file" id="file-input" class="file-input" accept=".docx" onchange="updateFileName(this)">
-                <p id="file-name"></p>
+        <div class="tabs">
+            <div class="tab active" onclick="showTab('docx-tab')">DOCX to SRT</div>
+            <div class="tab" onclick="showTab('audio-tab')">Audio to SRT</div>
+        </div>
+        
+        <!-- DOCX to SRT Tab -->
+        <div id="docx-tab" class="tab-content active">
+            <form action="/convert" method="post" enctype="multipart/form-data">
+                <div class="drop-zone" id="docx-drop-zone">
+                    <p>Drag & Drop DOCX Files Here</p>
+                    <p>or</p>
+                    <button type="button" class="button" onclick="document.getElementById('docx-file-input').click()">Browse Files</button>
+                    <input type="file" name="docx_file" id="docx-file-input" class="file-input" accept=".docx" onchange="updateFileName(this, 'docx-file-name')">
+                    <p id="docx-file-name"></p>
+                </div>
+                <button type="submit" class="button">Convert DOCX to SRT</button>
+            </form>
+            
+            <div class="note">
+                <h3>How to use:</h3>
+                <ul>
+                    <li>Upload a DOCX file with your transcript</li>
+                    <li>Each paragraph becomes a separate subtitle</li>
+                    <li>Speaker names (like "Name:") will be preserved</li>
+                    <li>Subtitles will be properly formatted with max 42 characters per line</li>
+                </ul>
             </div>
-            <button type="submit" class="button">Convert to SRT</button>
-        </form>
+        </div>
+        
+        <!-- Audio to SRT Tab -->
+        <div id="audio-tab" class="tab-content">
+            <form action="/transcribe" method="post" enctype="multipart/form-data">
+                <div class="drop-zone" id="audio-drop-zone">
+                    <p>Drag & Drop Audio Files Here</p>
+                    <p>or</p>
+                    <button type="button" class="button" onclick="document.getElementById('audio-file-input').click()">Browse Files</button>
+                    <input type="file" name="audio_file" id="audio-file-input" class="file-input" accept=".mp3,.wav,.flac,.ogg" onchange="updateFileName(this, 'audio-file-name')">
+                    <p id="audio-file-name"></p>
+                </div>
+                <button type="submit" class="button">Transcribe and Convert to SRT</button>
+            </form>
+            
+            <div class="note">
+                <h3>Google Speech-to-Text for Georgian language</h3>
+                <ul>
+                    <li>Supports MP3, WAV, FLAC, and OGG audio formats</li>
+                    <li>Best results with clear audio and minimal background noise</li>
+                    <li>WAV or FLAC formats provide better accuracy than MP3</li>
+                    <li>Processing may take several minutes for longer files</li>
+                    <li>Text will be formatted to SRT subtitle standard automatically</li>
+                </ul>
+            </div>
+        </div>
     </div>
 
     <script>
-        // Drag and drop functionality
-        const dropZone = document.getElementById('drop-zone');
-        const fileInput = document.getElementById('file-input');
-        const fileNameDisplay = document.getElementById('file-name');
-
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropZone.style.backgroundColor = '#e6f7ff';
-            dropZone.style.borderColor = '#1890ff';
-        });
-
-        dropZone.addEventListener('dragleave', () => {
-            dropZone.style.backgroundColor = '#f9f9f9';
-            dropZone.style.borderColor = '#ccc';
-        });
-
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.style.backgroundColor = '#f9f9f9';
-            dropZone.style.borderColor = '#ccc';
+        // Tab functionality
+        function showTab(tabId) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
             
-            const files = e.dataTransfer.files;
-            if (files.length) {
-                fileInput.files = files;
-                updateFileName(fileInput);
+            // Remove active class from all tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab content
+            document.getElementById(tabId).classList.add('active');
+            
+            // Add active class to clicked tab
+            if (tabId === 'docx-tab') {
+                document.querySelectorAll('.tab')[0].classList.add('active');
+            } else {
+                document.querySelectorAll('.tab')[1].classList.add('active');
             }
-        });
+        }
+        
+        // Drag and drop functionality for DOCX
+        const docxDropZone = document.getElementById('docx-drop-zone');
+        const docxFileInput = document.getElementById('docx-file-input');
+        setupDragAndDrop(docxDropZone, docxFileInput, 'docx-file-name');
+        
+        // Drag and drop functionality for Audio
+        const audioDropZone = document.getElementById('audio-drop-zone');
+        const audioFileInput = document.getElementById('audio-file-input');
+        setupDragAndDrop(audioDropZone, audioFileInput, 'audio-file-name');
+        
+        function setupDragAndDrop(dropZone, fileInput, fileNameId) {
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.style.backgroundColor = '#e6f7ff';
+                dropZone.style.borderColor = '#1890ff';
+            });
 
-        function updateFileName(input) {
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.style.backgroundColor = '#f9f9f9';
+                dropZone.style.borderColor = '#ccc';
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.style.backgroundColor = '#f9f9f9';
+                dropZone.style.borderColor = '#ccc';
+                
+                const files = e.dataTransfer.files;
+                if (files.length) {
+                    fileInput.files = files;
+                    updateFileName(fileInput, fileNameId);
+                }
+            });
+        }
+
+        function updateFileName(input, elementId) {
+            const fileNameDisplay = document.getElementById(elementId);
             if (input.files.length) {
                 const fileName = input.files[0].name;
                 fileNameDisplay.textContent = 'Selected file: ' + fileName;

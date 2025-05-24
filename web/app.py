@@ -3,6 +3,8 @@ import os
 import sys
 import tempfile
 import json
+from google.cloud import speech
+import io
 
 # Add the src directory to the path so we can import our modules
 root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -22,18 +24,145 @@ text_processor = TextProcessor()
 timestamp_generator = TimestampGenerator()
 converter = Converter(text_processor, timestamp_generator)
 
+# Audio processing class
+class AudioProcessor:
+    def __init__(self):
+        """Initialize the AudioProcessor with Google Cloud credentials."""
+        try:
+            self.client = speech.SpeechClient()
+        except Exception as e:
+            print(f"Error initializing Google Speech client: {e}")
+            self.client = None
+    
+    def transcribe_file(self, audio_path):
+        """Transcribes audio file using Google Speech-to-Text API with Georgian language."""
+        if not self.client:
+            raise ValueError("Google Speech client not initialized. Check credentials.")
+            
+        # Read the audio file
+        with io.open(audio_path, "rb") as audio_file:
+            content = audio_file.read()
+            
+        # Configure the request
+        audio = speech.RecognitionAudio(content=content)
+        
+        # Configure recognition with Georgian language
+        config = speech.RecognitionConfig(
+            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+            sample_rate_hertz=16000,  # Adjust based on your audio
+            language_code="ka-GE",    # Georgian language code
+            enable_automatic_punctuation=True,
+            enable_word_time_offsets=True,  # Enable word-level timestamps
+            model="default"
+        )
+        
+        # Make the API call
+        operation = self.client.long_running_recognize(config=config, audio=audio)
+        print("Waiting for operation to complete...")
+        response = operation.result(timeout=90)
+        
+        return response.results
+        
+    def convert_to_srt(self, results, text_processor, output_path):
+        """Converts Google Speech-to-Text results to SRT format."""
+        # Extract sentences with start/end times
+        segments = []
+        
+        for result in results:
+            if not result.alternatives:
+                continue
+                
+            transcript = result.alternatives[0].transcript.strip()
+            if not transcript:
+                continue
+                
+            # Get the first and last word's timestamps
+            words = result.alternatives[0].words
+            if not words:
+                continue
+                
+            start_time = words[0].start_time
+            end_time = words[-1].end_time
+            
+            # Add segment with start/end times
+            segments.append({
+                "text": transcript,
+                "start_time": start_time.total_seconds(),
+                "end_time": end_time.total_seconds()
+            })
+        
+        # Process segments with TextProcessor to enforce character limits
+        processed_segments = []
+        for segment in segments:
+            text_segments = text_processor._enforce_character_limit([segment["text"]], max_chars=42)
+            for text_seg in text_segments:
+                processed_segments.append({
+                    "text": text_seg,
+                    "start_time": segment["start_time"],
+                    "end_time": segment["end_time"]
+                })
+        
+        # Generate SRT file
+        with open(output_path, "w", encoding="utf-8") as srt_file:
+            for i, segment in enumerate(processed_segments):
+                start = self._format_timestamp(segment["start_time"])
+                end = self._format_timestamp(segment["end_time"])
+                
+                srt_file.write(f"{i+1}\n")
+                srt_file.write(f"{start} --> {end}\n")
+                srt_file.write(f"{segment['text']}\n\n")
+                
+        return output_path
+    
+    def _format_timestamp(self, seconds):
+        """Convert seconds to SRT timestamp format."""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        msecs = int((seconds - int(seconds)) * 1000)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d},{msecs:03d}"
+
 # Add this code to handle credentials securely
-if os.environ.get('GOOGLE_CREDENTIALS'):
-    # Create credentials file from environment variable on Vercel
-    creds_json = os.environ.get('GOOGLE_CREDENTIALS')
-    credentials_path = 'google_credentials_temp.json'
-    with open(credentials_path, 'w') as f:
-        f.write(creds_json)
+def get_google_credentials():
+    """Get Google credentials from environment variables or file"""
+    # Check if running on Vercel with environment variables
+    if os.environ.get('GOOGLE_PRIVATE_KEY') and os.environ.get('GOOGLE_CLIENT_EMAIL'):
+        # Create credentials from environment variables
+        credentials_dict = {
+            "type": "service_account",
+            "project_id": os.environ.get('GOOGLE_PROJECT_ID'),
+            "private_key": os.environ.get('GOOGLE_PRIVATE_KEY').replace('\\n', '\n'),
+            "client_email": os.environ.get('GOOGLE_CLIENT_EMAIL'),
+            "client_id": os.environ.get('GOOGLE_CLIENT_ID', ''),
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/{os.environ.get('GOOGLE_CLIENT_EMAIL').replace('@', '%40')}",
+            "universe_domain": "googleapis.com"
+        }
+        
+        # Create temp credentials file for library to use
+        with open('google_credentials_temp.json', 'w') as f:
+            json.dump(credentials_dict, f)
+        
+        return 'google_credentials_temp.json'
+    
+    # Check for credentials file
+    elif os.path.exists('google_credentials.json'):
+        return 'google_credentials.json'
+    
+    return None
+
+# Set up Google credentials if available
+credentials_path = get_google_credentials()
+if credentials_path:
     os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
-else:
-    # Look for credentials file locally
-    if os.path.exists('google_credentials.json'):
-        os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'google_credentials.json'
+
+# Initialize our components
+text_processor = TextProcessor()
+timestamp_generator = TimestampGenerator()
+converter = Converter(text_processor, timestamp_generator)
+audio_processor = AudioProcessor()
 
 @app.route('/')
 def index():
@@ -58,21 +187,21 @@ def convert():
         return redirect(url_for('index'))
     
     try:
-        # Create temp directory for file processing
+        # Create temp directory
         temp_dir = tempfile.mkdtemp()
         
         # Save uploaded file
         docx_path = os.path.join(temp_dir, file.filename)
         file.save(docx_path)
         
-        # Generate output path
+        # Create output path
         srt_filename = os.path.splitext(file.filename)[0] + '.srt'
         srt_path = os.path.join(temp_dir, srt_filename)
         
         # Convert file
         converter.convert_docx_to_srt(docx_path, srt_path)
         
-        # Send the converted file
+        # Return the converted file
         return send_file(
             srt_path,
             as_attachment=True,
@@ -84,29 +213,30 @@ def convert():
         flash(f'Error during conversion: {str(e)}')
         return redirect(url_for('index'))
 
-@app.route('/audio')
-def audio_page():
-    return render_template('audio.html')
-
 @app.route('/transcribe', methods=['POST'])
-def transcribe_audio():
+def transcribe():
     # Check if file was uploaded
     if 'audio_file' not in request.files:
         flash('No file uploaded')
-        return redirect(url_for('audio_page'))
+        return redirect(url_for('index'))
     
     file = request.files['audio_file']
     
     # Check if file is valid
     if file.filename == '':
         flash('No file selected')
-        return redirect(url_for('audio_page'))
+        return redirect(url_for('index'))
     
     # Check file extension
     allowed_extensions = ['.mp3', '.wav', '.flac', '.ogg']
     if not any(file.filename.lower().endswith(ext) for ext in allowed_extensions):
         flash(f'Only {", ".join(allowed_extensions)} files are supported')
-        return redirect(url_for('audio_page'))
+        return redirect(url_for('index'))
+    
+    # Check if Google credentials are set up
+    if not os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
+        flash('Google Cloud Speech-to-Text credentials not configured. Please check server setup.')
+        return redirect(url_for('index'))
     
     try:
         # Create temp directory
@@ -119,9 +249,6 @@ def transcribe_audio():
         # Create output path
         srt_filename = os.path.splitext(file.filename)[0] + '.srt'
         srt_path = os.path.join(temp_dir, srt_filename)
-        
-        # Initialize processors
-        audio_processor = AudioProcessor()
         
         # Process the audio file
         results = audio_processor.transcribe_file(audio_path)
@@ -139,8 +266,7 @@ def transcribe_audio():
         
     except Exception as e:
         flash(f'Error during transcription: {str(e)}')
-        return redirect(url_for('audio_page'))
+        return redirect(url_for('index'))
 
-# For local development
 if __name__ == '__main__':
     app.run(debug=True)
