@@ -102,50 +102,44 @@ class AudioProcessor:
         # Get file extension
         file_ext = os.path.splitext(audio_path)[1].lower()
         
-        # Special handling for MP3 files
+        # Always try to convert MP3 files to WAV or FLAC first
         if file_ext == '.mp3':
-            logging.info("Using special handling for MP3 file")
-            import base64
-            
-            # Read MP3 file as base64
-            with open(audio_path, "rb") as mp3_file:
-                mp3_content = mp3_file.read()
-                
-            # Create audio content using base64 encoding
-            audio = speech.RecognitionAudio(content=mp3_content)
-            
-            # Configure with MP3 encoding explicitly
-            config = speech.RecognitionConfig(
-                encoding=speech.RecognitionConfig.AudioEncoding.MP3,
-                sample_rate_hertz=16000,  
-                language_code="ka-GE",
-                enable_automatic_punctuation=True,
-                enable_word_time_offsets=True,
-                model="default"
-            )
-        else:
-            # Normal handling for other file types
-            with io.open(audio_path, "rb") as audio_file:
-                content = audio_file.read()
-            
-            # Set encoding based on file type
-            if file_ext == '.flac':
-                encoding = speech.RecognitionConfig.AudioEncoding.FLAC
-            elif file_ext == '.ogg':
-                encoding = speech.RecognitionConfig.AudioEncoding.OGG_OPUS
-            else:  # Default for WAV and other formats
-                encoding = speech.RecognitionConfig.AudioEncoding.LINEAR16
-            
-            # Configure the request
-            audio = speech.RecognitionAudio(content=content)
-            config = speech.RecognitionConfig(
-                encoding=encoding,
-                sample_rate_hertz=16000,
-                language_code="ka-GE",
-                enable_automatic_punctuation=True,
-                enable_word_time_offsets=True,
-                model="default"
-            )
+            logging.info("MP3 file detected, attempting conversion to FLAC")
+            try:
+                converted_path = self.convert_audio_if_needed(audio_path)
+                if converted_path != audio_path:
+                    audio_path = converted_path
+                    file_ext = os.path.splitext(audio_path)[1].lower()
+                    logging.info(f"Using converted file: {audio_path}")
+            except Exception as e:
+                logging.warning(f"Audio conversion failed: {e}, falling back to WAV encoding")
+                # MP3 doesn't have its own enum in the API, so we need to use another encoding
+                file_ext = '.wav'  # Treat MP3 as WAV if conversion fails
+    
+        # Read the audio file
+        with io.open(audio_path, "rb") as audio_file:
+            content = audio_file.read()
+        
+        # Set encoding based on file type - using proper encoding constants
+        if file_ext == '.flac':
+            encoding = speech.RecognitionConfig.AudioEncoding.FLAC
+        elif file_ext == '.ogg':
+            encoding = speech.RecognitionConfig.AudioEncoding.OGG_OPUS
+        else:  # Default for WAV, MP3 and other formats
+            encoding = speech.RecognitionConfig.AudioEncoding.LINEAR16
+    
+        # Configure the request
+        audio = speech.RecognitionAudio(content=content)
+        config = speech.RecognitionConfig(
+            encoding=encoding,
+            sample_rate_hertz=16000,
+            language_code="ka-GE",
+            enable_automatic_punctuation=True,
+            enable_word_time_offsets=True,
+            model="default"
+        )
+        
+        logging.info(f"Transcribing audio with {encoding} encoding")
         
         # Make the API call
         operation = self.client.long_running_recognize(config=config, audio=audio)
