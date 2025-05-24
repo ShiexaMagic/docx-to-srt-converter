@@ -12,18 +12,28 @@ def get_google_credentials_direct():
         client_email = os.environ.get('GOOGLE_CLIENT_EMAIL')
         private_key = os.environ.get('GOOGLE_PRIVATE_KEY')
         
+        logging.info(f"Project ID present: {bool(project_id)}")
+        logging.info(f"Client email present: {bool(client_email)}")
+        logging.info(f"Private key present: {bool(private_key)}")
+        
         # Check if all required variables are present
         if not all([project_id, client_email, private_key]):
             logging.error("Missing required Google credentials variables")
-            logging.info(f"Project ID present: {bool(project_id)}")
-            logging.info(f"Client email present: {bool(client_email)}")
-            logging.info(f"Private key present: {bool(private_key)}")
             return None
         
         # Fix private key formatting if needed
         if '\\n' in private_key and '\n' not in private_key:
+            logging.info("Converting \\n to newlines in private key")
             private_key = private_key.replace('\\n', '\n')
         
+        # Verify key format
+        if not private_key.startswith('-----BEGIN PRIVATE KEY-----'):
+            logging.error("Private key does not start with correct header")
+            return None
+            
+        if not private_key.strip().endswith('-----END PRIVATE KEY-----'):
+            logging.error("Private key does not end with correct footer")
+            
         # Create credentials info dictionary
         credentials_info = {
             "type": "service_account",
@@ -35,6 +45,8 @@ def get_google_credentials_direct():
             "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
             "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/{client_email.replace('@', '%40')}"
         }
+        
+        logging.info("Creating credentials from service account info")
         
         # Create credentials object directly (no file needed)
         credentials = service_account.Credentials.from_service_account_info(credentials_info)
