@@ -51,15 +51,13 @@ def get_google_credentials():
     try:
         # Check if running with environment variables
         if os.environ.get('GOOGLE_PRIVATE_KEY') and os.environ.get('GOOGLE_CLIENT_EMAIL'):
-            logging.info("Found Google credentials in environment variables")
-            
             # Get private key and fix formatting issues
             private_key = os.environ.get('GOOGLE_PRIVATE_KEY')
             
             # Ensure proper newlines in the private key
-            if r'\n' in private_key and '\n' not in private_key:
-                private_key = private_key.replace(r'\n', '\n')
-            
+            if '\\n' in private_key and '\n' not in private_key:
+                private_key = private_key.replace('\\n', '\n')
+                
             # Create credentials from environment variables
             credentials_dict = {
                 "type": "service_account",
@@ -84,21 +82,16 @@ def get_google_credentials():
                 with open(credentials_path, 'w') as f:
                     json.dump(credentials_dict, f)
                 
-                logging.info(f"Created credentials file at {credentials_path}")
                 return credentials_path
             except Exception as e:
                 logging.error(f"Error creating credentials file: {str(e)}")
-                logging.error(traceback.format_exc())
                 return None
         
         # Check for credentials file
         elif os.path.exists('google_credentials.json'):
-            logging.info("Found google_credentials.json file")
             return 'google_credentials.json'
         
-        logging.warning("No Google credentials found")
         return None
     except Exception as e:
         logging.error(f"Error in get_google_credentials: {str(e)}")
-        logging.error(traceback.format_exc())
         return None

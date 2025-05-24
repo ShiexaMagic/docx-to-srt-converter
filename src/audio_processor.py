@@ -4,7 +4,7 @@ import io
 import logging
 import traceback
 
-from credentials import get_google_credentials, get_google_credentials_direct  # Fix the import
+from src.credentials import get_google_credentials, get_google_credentials_direct
 
 class AudioProcessor:
     def __init__(self):
