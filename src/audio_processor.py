@@ -98,24 +98,32 @@ class AudioProcessor:
         """Transcribes audio file using Google Speech-to-Text API."""
         if not self.client:
             raise ValueError("Google Speech client not initialized. Check credentials.")
-    
-        # Convert audio if it's an MP3 file
+        
+        # Get file extension to determine encoding
         file_ext = os.path.splitext(audio_path)[1].lower()
+        
+        # Try to convert MP3 files first (this should already be in your code)
         if file_ext == '.mp3':
             logging.info("MP3 file detected, attempting conversion to FLAC")
             try:
-                audio_path = self.convert_audio_if_needed(audio_path)
-                file_ext = os.path.splitext(audio_path)[1].lower()  # Update extension after conversion
-                logging.info(f"Using converted file: {audio_path}")
+                converted_path = self.convert_audio_if_needed(audio_path)
+                if converted_path != audio_path:
+                    audio_path = converted_path
+                    file_ext = os.path.splitext(audio_path)[1].lower()  # Update extension after conversion
+                    logging.info(f"Using converted file: {audio_path}")
             except Exception as e:
                 logging.warning(f"Audio conversion failed: {e}, will try with original file")
-            
+        
         # Read the audio file
         with io.open(audio_path, "rb") as audio_file:
             content = audio_file.read()
     
-        # Set encoding based on file type
-        if file_ext == '.flac':
+        # Set encoding based on file type - IMPORTANT FIX HERE
+        if file_ext == '.mp3':
+            # This is the key fix - Make sure we use MP3 encoding for MP3 files
+            encoding = speech.RecognitionConfig.AudioEncoding.MP3
+            logging.info("Using MP3 encoding for MP3 file")
+        elif file_ext == '.flac':
             encoding = speech.RecognitionConfig.AudioEncoding.FLAC
         elif file_ext == '.ogg':
             encoding = speech.RecognitionConfig.AudioEncoding.OGG_OPUS
@@ -132,7 +140,7 @@ class AudioProcessor:
         # Configure recognition with Georgian language
         config = speech.RecognitionConfig(
             encoding=encoding,
-            sample_rate_hertz=sample_rate,
+            sample_rate_hertz=sample_rate,  
             language_code="ka-GE",    # Georgian language code
             enable_automatic_punctuation=True,
             enable_word_time_offsets=True,  # Enable word-level timestamps
