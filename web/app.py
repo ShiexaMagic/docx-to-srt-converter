@@ -5,6 +5,7 @@ import tempfile
 import json
 import logging
 import traceback
+from google.cloud import speech  # Add this import
 
 # Add the src directory to the path so we can import our modules
 root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -139,7 +140,13 @@ def transcribe():
         # Save uploaded file
         audio_path = os.path.join(temp_dir, file.filename)
         file.save(audio_path)
-        
+
+        # Convert audio if needed
+        try:
+            audio_path = audio_processor.convert_audio_if_needed(audio_path)
+        except Exception as e:
+            logging.warning(f"Audio conversion skipped: {e}")
+
         # Create output path
         srt_filename = os.path.splitext(file.filename)[0] + '.srt'
         srt_path = os.path.join(temp_dir, srt_filename)

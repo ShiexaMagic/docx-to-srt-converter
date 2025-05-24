@@ -4,6 +4,8 @@ import io
 import logging
 import traceback
 import json
+import subprocess
+import tempfile
 
 # Fix the import to include both functions
 from src.credentials import get_google_credentials_direct
@@ -93,30 +95,21 @@ class AudioProcessor:
             logging.error(traceback.format_exc())
     
     def transcribe_file(self, audio_path):
-        """Transcribes audio file using Google Speech-to-Text API with Georgian language."""
+        """Transcribes audio file using Google Speech-to-Text API."""
         if not self.client:
             raise ValueError("Google Speech client not initialized. Check credentials.")
             
         # Read the audio file
         with io.open(audio_path, "rb") as audio_file:
             content = audio_file.read()
-        
-        # Determine encoding based on file extension
-        encoding = speech.RecognitionConfig.AudioEncoding.LINEAR16  # Default
-        sample_rate = 16000  # Default
-        
-        # Detect file format to set correct encoding
-        file_ext = os.path.splitext(audio_path)[1].lower()
-        if file_ext == '.mp3':
-            encoding = speech.RecognitionConfig.AudioEncoding.MP3
-        elif file_ext == '.flac':
-            encoding = speech.RecognitionConfig.AudioEncoding.FLAC
-        elif file_ext == '.ogg':
-            encoding = speech.RecognitionConfig.AudioEncoding.OGG_OPUS
-            
+    
+        # Use LINEAR16 encoding which is widely supported
+        encoding = speech.RecognitionConfig.AudioEncoding.LINEAR16
+        sample_rate = 16000
+    
         # Configure the request
         audio = speech.RecognitionAudio(content=content)
-        
+    
         # Configure recognition with Georgian language
         config = speech.RecognitionConfig(
             encoding=encoding,
@@ -127,7 +120,7 @@ class AudioProcessor:
             model="default"
         )
         
-        logging.info(f"Transcribing audio with format: {encoding}, sample rate: {sample_rate}")
+        logging.info(f"Transcribing audio with format: LINEAR16, sample rate: {sample_rate}")
         
         # Make the API call
         operation = self.client.long_running_recognize(config=config, audio=audio)
@@ -194,3 +187,35 @@ class AudioProcessor:
         secs = int(seconds % 60)
         msecs = int((seconds - int(seconds)) * 1000)
         return f"{hours:02d}:{minutes:02d}:{secs:02d},{msecs:03d}"
+    
+    def convert_audio_if_needed(self, audio_path):
+        """
+        Convert audio to a format supported by Google Speech API if necessary.
+        Returns path to the (possibly converted) audio file.
+        """
+        file_ext = os.path.splitext(audio_path)[1].lower()
+        
+        # If it's already a supported format, return the original path
+        if file_ext in ['.flac', '.wav']:
+            return audio_path
+            
+        try:
+            # For MP3 and other formats, convert to FLAC
+            output_path = os.path.splitext(audio_path)[0] + '.flac'
+            
+            # Use ffmpeg for conversion if available
+            try:
+                logging.info(f"Converting {file_ext} to FLAC format")
+                subprocess.run(
+                    ['ffmpeg', '-i', audio_path, '-ar', '16000', output_path],
+                    check=True,
+                    capture_output=True
+                )
+                return output_path
+            except (subprocess.SubprocessError, FileNotFoundError):
+                logging.warning("ffmpeg not available or conversion failed")
+                return audio_path  # Fall back to original file
+                
+        except Exception as e:
+            logging.error(f"Audio conversion failed: {e}")
+            return audio_path  # Fall back to original file
