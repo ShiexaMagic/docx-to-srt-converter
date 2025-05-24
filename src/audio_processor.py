@@ -1,6 +1,7 @@
 import os
 from google.cloud import speech
 import io
+import logging
 
 class AudioProcessor:
     def __init__(self, credentials_path=None):
@@ -11,26 +12,44 @@ class AudioProcessor:
     
     def transcribe_file(self, audio_path):
         """Transcribes audio file using Google Speech-to-Text API with Georgian language."""
+        if not self.client:
+            raise ValueError("Google Speech client not initialized. Check credentials.")
+            
         # Read the audio file
         with io.open(audio_path, "rb") as audio_file:
             content = audio_file.read()
+        
+        # Determine encoding based on file extension
+        encoding = speech.RecognitionConfig.AudioEncoding.LINEAR16  # Default
+        sample_rate = 16000  # Default
+        
+        # Detect file format to set correct encoding
+        file_ext = os.path.splitext(audio_path)[1].lower()
+        if file_ext == '.mp3':
+            encoding = speech.RecognitionConfig.AudioEncoding.MP3
+        elif file_ext == '.flac':
+            encoding = speech.RecognitionConfig.AudioEncoding.FLAC
+        elif file_ext == '.ogg':
+            encoding = speech.RecognitionConfig.AudioEncoding.OGG_OPUS
             
         # Configure the request
         audio = speech.RecognitionAudio(content=content)
         
         # Configure recognition with Georgian language
         config = speech.RecognitionConfig(
-            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-            sample_rate_hertz=16000,  # Adjust based on your audio
+            encoding=encoding,
+            sample_rate_hertz=sample_rate,
             language_code="ka-GE",    # Georgian language code
             enable_automatic_punctuation=True,
             enable_word_time_offsets=True,  # Enable word-level timestamps
             model="default"
         )
         
+        logging.info(f"Transcribing audio with format: {encoding}, sample rate: {sample_rate}")
+        
         # Make the API call
         operation = self.client.long_running_recognize(config=config, audio=audio)
-        print("Waiting for operation to complete...")
+        logging.info("Waiting for operation to complete...")
         response = operation.result(timeout=90)
         
         return response.results

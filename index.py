@@ -1,16 +1,15 @@
-from web.app import app
 import os
-import tempfile
+import sys
 
-# This file is needed for Vercel to find our Flask app
+# Add the src directory to the path
+root_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(root_dir)
+sys.path.append(os.path.join(root_dir, 'src'))
 
-def get_temp_dir():
-    """Get appropriate temp directory based on environment"""
-    if os.environ.get('VERCEL'):
-        # On Vercel, use /tmp which is writable in serverless functions
-        temp_dir = '/tmp'
-        os.makedirs(temp_dir, exist_ok=True)
-        return temp_dir
-    else:
-        # Locally, use tempfile
-        return tempfile.mkdtemp()
+# Import Flask app
+from web.app import app
+
+# Explicitly set this environment variable to indicate we're on Vercel
+os.environ['VERCEL'] = '1'
+
+# This allows Vercel to import our Flask app
