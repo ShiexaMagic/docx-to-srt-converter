@@ -1,0 +1,8 @@
+# .gitignore
+.env
+google_credentials.json
+google_credentials_temp.json
+__pycache__/
+*.py[cod]
+*$py.class
+.DS_Store
