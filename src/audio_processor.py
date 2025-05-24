@@ -2,7 +2,9 @@ import os
 from google.cloud import speech
 import io
 import logging
-from your_credentials_module import get_google_credentials, get_google_credentials_direct  # Adjust import as necessary
+import traceback
+
+from credentials import get_google_credentials, get_google_credentials_direct  # Fix the import
 
 class AudioProcessor:
     def __init__(self):

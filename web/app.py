@@ -27,8 +27,9 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key')
 try:
     from dotenv import load_dotenv
     load_dotenv()
+    logging.info("Loaded environment variables from .env file")
 except ImportError:
-    pass  # dotenv not installed, skip for production
+    logging.warning("python-dotenv not installed, skipping .env file loading")
 
 # Handle Google Cloud credentials
 def get_google_credentials():
@@ -342,6 +343,37 @@ def transcribe():
         logging.error(traceback.format_exc())
         flash(f'Error during transcription: {str(e)}')
         return redirect(url_for('index'))
+
+@app.route('/debug-credentials')
+def debug_credentials():
+    """Debug route to check credentials status"""
+    from src.credentials import get_google_credentials_direct
+    
+    result = {
+        'env_vars_present': {
+            'GOOGLE_PROJECT_ID': bool(os.environ.get('GOOGLE_PROJECT_ID')),
+            'GOOGLE_CLIENT_EMAIL': bool(os.environ.get('GOOGLE_CLIENT_EMAIL')),
+            'GOOGLE_PRIVATE_KEY': bool(os.environ.get('GOOGLE_PRIVATE_KEY'))
+        }
+    }
+    
+    # Test direct credentials
+    try:
+        credentials = get_google_credentials_direct()
+        result['direct_credentials_created'] = bool(credentials)
+    except Exception as e:
+        result['direct_credentials_error'] = str(e)
+    
+    # Test audio processor
+    try:
+        from src.audio_processor import AudioProcessor
+        processor = AudioProcessor()
+        result['audio_processor_initialized'] = bool(processor)
+        result['speech_client_created'] = bool(processor.client)
+    except Exception as e:
+        result['audio_processor_error'] = str(e)
+    
+    return result
 
 # For local development
 if __name__ == '__main__':
